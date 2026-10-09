@@ -1,0 +1,1107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0e0f13" />
+<title>Rep Coach</title>
+<style>
+  /* ---- Layout concept: single-column mobile app — stats, voice control, live log ---- */
+  :root {
+    /* Color */
+    --bg: #0e0f13;
+    --bg-elev: #16181f;
+    --bg-elev-2: #1d2029;
+    --line: #262a35;
+    --fg: #f2f3f5;
+    --muted: #8a8f9a;
+    --accent: #ff6b35;      /* energy / effort */
+    --accent-2: #ffb02e;    /* amber highlight */
+    --good: #4ade80;        /* confirmations */
+    --danger: #f05d5d;
+
+    /* Type */
+    --font-display: "SF Pro Display", "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+    --font-body: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "SF Mono", ui-monospace, "Cascadia Code", "Roboto Mono", Menlo, Consolas, monospace;
+
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background:
+      radial-gradient(1100px 520px at 50% -10%, rgba(255,107,53,0.12), transparent 60%),
+      var(--bg);
+    color: var(--fg);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    padding:
+      env(safe-area-inset-top, 0px)
+      env(safe-area-inset-right, 0px)
+      env(safe-area-inset-bottom, 0px)
+      env(safe-area-inset-left, 0px);
+  }
+
+  .app {
+    max-width: 560px;
+    margin: 0 auto;
+    padding: 20px 16px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  /* ---- Header ---- */
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .brand { display: flex; align-items: center; gap: 11px; }
+  .brand .logo {
+    width: 40px; height: 40px; border-radius: 12px; flex: none;
+    display: grid; place-items: center; font-size: 20px;
+    background: linear-gradient(145deg, var(--accent), var(--accent-2));
+    box-shadow: 0 6px 18px rgba(255,107,53,0.35);
+  }
+  .brand h1 { font-family: var(--font-display); font-size: 1.28rem; margin: 0; letter-spacing: -0.02em; }
+  .brand .date { margin: 2px 0 0; font-size: 0.78rem; color: var(--muted); }
+
+  .sound-toggle {
+    flex: none;
+    appearance: none; border: 1px solid var(--line); background: var(--bg-elev);
+    color: var(--muted); border-radius: 999px; padding: 7px 12px; font-size: 0.78rem;
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-family: var(--font-body);
+  }
+  .sound-toggle[aria-pressed="true"] { color: var(--fg); border-color: #3a3f4d; }
+  .sound-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---- Stat tiles ---- */
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .tile {
+    background: var(--bg-elev); border: 1px solid var(--line); border-radius: 16px;
+    padding: 16px 16px 14px;
+  }
+  .tile .k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .tile .v {
+    font-family: var(--font-display); font-weight: 700; font-size: 2.1rem; line-height: 1.05;
+    margin-top: 6px; font-variant-numeric: tabular-nums;
+  }
+  .tile.flash { animation: flash 0.7s ease; }
+  @keyframes flash { 0% { border-color: var(--good); } 100% { border-color: var(--line); } }
+
+  /* ---- Mic card ---- */
+  .mic-card {
+    background: var(--bg-elev); border: 1px solid var(--line); border-radius: 20px;
+    padding: 24px 18px 20px; text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+  }
+  .mic-btn {
+    position: relative; width: 128px; height: 128px; border-radius: 50%;
+    border: none; cursor: pointer; flex: none;
+    background: linear-gradient(145deg, var(--accent), var(--accent-2));
+    box-shadow: 0 10px 34px rgba(255,107,53,0.40);
+    display: grid; place-items: center; color: #15100b;
+    transition: transform 0.12s ease, box-shadow 0.2s ease;
+  }
+  .mic-btn:active { transform: scale(0.96); }
+  .mic-btn:focus-visible { outline: 3px solid var(--fg); outline-offset: 4px; }
+  .mic-btn svg { width: 46px; height: 46px; }
+  .mic-btn[disabled] { filter: grayscale(0.7) brightness(0.6); cursor: not-allowed; box-shadow: none; }
+
+  .mic-btn.listening { background: linear-gradient(145deg, var(--good), #22c55e); color: #052e12; }
+  .mic-btn .ring {
+    position: absolute; inset: -6px; border-radius: 50%;
+    border: 3px solid var(--good); opacity: 0; pointer-events: none;
+  }
+  .mic-btn.listening .ring { animation: pulse 1.5s ease-out infinite; }
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 0.7; }
+    100% { transform: scale(1.5); opacity: 0; }
+  }
+
+  .mic-status { font-size: 0.92rem; color: var(--fg); min-height: 1.3em; font-weight: 600; }
+  .mic-hint { font-size: 0.8rem; color: var(--muted); max-width: 34ch; margin: 0 auto; line-height: 1.5; }
+  .transcript {
+    font-family: var(--font-mono); font-size: 0.82rem; color: var(--accent-2);
+    min-height: 1.2em; word-break: break-word;
+  }
+
+  /* ---- Command input fallback ---- */
+  .cmd-form { display: flex; gap: 8px; }
+  .cmd-form input {
+    flex: 1; min-width: 0; background: var(--bg-elev-2); border: 1px solid var(--line);
+    color: var(--fg); border-radius: 12px; padding: 12px 14px; font-size: 0.95rem; font-family: var(--font-body);
+  }
+  .cmd-form input::placeholder { color: var(--muted); }
+  .cmd-form input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .cmd-form button {
+    flex: none; background: var(--bg-elev-2); border: 1px solid var(--line); color: var(--fg);
+    border-radius: 12px; padding: 0 16px; font-size: 0.95rem; cursor: pointer; font-family: var(--font-body);
+  }
+  .cmd-form button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* ---- Rest timer ---- */
+  .timer-card {
+    background: var(--bg-elev); border: 1px solid var(--line); border-radius: 20px;
+    padding: 20px; display: flex; align-items: center; gap: 20px;
+  }
+  .timer-ring { position: relative; width: 108px; height: 108px; flex: none; }
+  .timer-ring svg { transform: rotate(-90deg); display: block; }
+  .timer-ring .track { stroke: var(--bg-elev-2); }
+  .timer-ring .bar { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 0.95s linear; }
+  .timer-ring .count {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; font-variant-numeric: tabular-nums;
+  }
+  .timer-meta { flex: 1; min-width: 0; }
+  .timer-meta .label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+  .timer-meta .title { font-family: var(--font-display); font-size: 1.15rem; margin: 4px 0 12px; }
+  .timer-cancel {
+    background: transparent; border: 1px solid var(--line); color: var(--muted);
+    border-radius: 10px; padding: 8px 14px; cursor: pointer; font-size: 0.85rem; font-family: var(--font-body);
+  }
+  .timer-cancel:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ---- Log ---- */
+  .log-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px; }
+  .log-head h2 { font-family: var(--font-display); font-size: 1.05rem; margin: 0; }
+  .log-actions { display: flex; gap: 8px; }
+  .log-actions button {
+    background: transparent; border: 1px solid var(--line); color: var(--muted);
+    border-radius: 10px; padding: 6px 11px; font-size: 0.78rem; cursor: pointer; font-family: var(--font-body);
+  }
+  .log-actions button:hover { color: var(--fg); }
+  .log-actions button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .groups { display: flex; flex-direction: column; gap: 12px; }
+  .group {
+    background: var(--bg-elev); border: 1px solid var(--line); border-radius: 16px; overflow: hidden;
+  }
+  .group > .g-head {
+    display: flex; align-items: center; gap: 11px; padding: 13px 15px;
+    border-bottom: 1px solid var(--line);
+  }
+  .g-head .emoji { font-size: 1.5rem; flex: none; }
+  .g-head .g-name { font-weight: 650; flex: 1; min-width: 0; }
+  .g-head .g-sub { font-size: 0.82rem; color: var(--accent-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .set-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 15px;
+    font-size: 0.92rem;
+  }
+  .set-row + .set-row { border-top: 1px solid rgba(38,42,53,0.6); }
+  .set-row.new { animation: slidein 0.45s ease; }
+  @keyframes slidein { from { background: rgba(74,222,128,0.14); } to { background: transparent; } }
+  .set-row .reps { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .set-row .reps b { color: var(--accent); }
+  .set-row .time { margin-left: auto; color: var(--muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
+  .set-row .del {
+    background: transparent; border: none; color: var(--muted); cursor: pointer;
+    font-size: 1rem; line-height: 1; padding: 4px; border-radius: 6px;
+  }
+  .set-row .del:hover { color: var(--danger); }
+  .set-row .del:focus-visible { outline: 2px solid var(--danger); outline-offset: 1px; }
+
+  .empty {
+    text-align: center; color: var(--muted); padding: 28px 16px; font-size: 0.9rem;
+    border: 1px dashed var(--line); border-radius: 16px; line-height: 1.6;
+  }
+  .empty .big { font-size: 1.8rem; display: block; margin-bottom: 8px; }
+
+  /* ---- Toast ---- */
+  .toast {
+    position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%) translateY(16px);
+    background: var(--bg-elev-2); border: 1px solid var(--line); color: var(--fg);
+    padding: 11px 16px; border-radius: 12px; font-size: 0.88rem; max-width: 88vw;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.45); opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease; z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.err { border-color: var(--danger); }
+  .toast.ok { border-color: var(--good); }
+
+  /* ---- Daily plan / notes ---- */
+  .notes-card {
+    background: var(--bg-elev); border: 1px solid var(--line); border-radius: 16px;
+    padding: 15px 16px 16px;
+  }
+  .notes-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .notes-head .title { font-family: var(--font-display); font-size: 1.02rem; }
+  .notes-head .saved { font-size: 0.74rem; color: var(--muted); opacity: 0; transition: opacity 0.2s ease; }
+  .notes-head .saved.show { opacity: 1; color: var(--good); }
+  .notes-card textarea {
+    width: 100%; box-sizing: border-box; resize: vertical; min-height: 128px;
+    background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 12px;
+    color: var(--fg); padding: 12px 14px; font-family: var(--font-mono); font-size: 0.86rem;
+    line-height: 1.65; tab-size: 2;
+  }
+  .notes-card textarea::placeholder { color: var(--muted); }
+  .notes-card textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .notes-reset {
+    background: transparent; border: 1px solid var(--line); color: var(--muted);
+    border-radius: 9px; padding: 5px 10px; font-size: 0.74rem; cursor: pointer; font-family: var(--font-body);
+    margin-top: 10px;
+  }
+  .notes-reset:hover { color: var(--fg); }
+  .notes-reset:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .cheats { font-size: 0.76rem; color: var(--muted); line-height: 1.7; }
+  .cheats code {
+    font-family: var(--font-mono); color: var(--fg); background: var(--bg-elev);
+    border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: 0.82em;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+</style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div class="brand">
+        <div class="logo" aria-hidden="true">🏋️</div>
+        <div>
+          <h1>Rep Coach</h1>
+          <p class="date" id="dateLabel"></p>
+        </div>
+      </div>
+      <button class="sound-toggle" id="soundToggle" aria-pressed="true" title="Toggle spoken confirmations">
+        <span id="soundIcon">🔊</span><span>Voice</span>
+      </button>
+    </header>
+
+    <section class="stats" aria-label="Today's totals">
+      <div class="tile" id="tileSets">
+        <div class="k">Total sets</div>
+        <div class="v" id="statSets">0</div>
+      </div>
+      <div class="tile" id="tileReps">
+        <div class="k">Total reps</div>
+        <div class="v" id="statReps">0</div>
+      </div>
+    </section>
+
+    <section class="mic-card">
+      <button class="mic-btn" id="micBtn" aria-label="Start listening">
+        <span class="ring" aria-hidden="true"></span>
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" fill="currentColor"/>
+          <path d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V21a1 1 0 1 0 2 0v-3.08A7 7 0 0 0 19 11Z" fill="currentColor"/>
+        </svg>
+      </button>
+      <div class="mic-status" id="micStatus">Tap to speak</div>
+      <div class="transcript" id="transcript"></div>
+      <p class="mic-hint">Try: “log 3 sets of 12 squats”, “start rest timer 90 seconds”, “show summary”.</p>
+
+      <form class="cmd-form" id="cmdForm" autocomplete="off">
+        <input type="text" id="cmdInput" placeholder="…or type a command" aria-label="Type a command" />
+        <button type="submit">Send</button>
+      </form>
+    </section>
+
+    <section class="notes-card">
+      <div class="notes-head">
+        <span class="title" id="notesTitle">Today's plan</span>
+        <span class="saved" id="notesSaved">Saved</span>
+      </div>
+      <textarea id="notesArea" spellcheck="false" aria-label="Today's plan and notes"
+                placeholder="Write your plan for today…"></textarea>
+      <button class="notes-reset" id="notesReset" title="Replace with the suggested plan for this weekday">Use suggested plan</button>
+    </section>
+
+    <section class="timer-card" id="timerCard" hidden aria-live="polite">
+      <div class="timer-ring">
+        <svg width="108" height="108" viewBox="0 0 108 108">
+          <circle class="track" cx="54" cy="54" r="48" fill="none" stroke-width="8"></circle>
+          <circle class="bar" id="timerBar" cx="54" cy="54" r="48" fill="none" stroke-width="8"
+                  stroke-dasharray="301.59" stroke-dashoffset="0"></circle>
+        </svg>
+        <div class="count" id="timerCount">0:00</div>
+      </div>
+      <div class="timer-meta">
+        <div class="label">Rest timer</div>
+        <div class="title" id="timerTitle">Resting…</div>
+        <button class="timer-cancel" id="timerCancel">Cancel</button>
+      </div>
+    </section>
+
+    <div class="log-head">
+      <h2>Today's log</h2>
+      <div class="log-actions">
+        <button id="summaryBtn" title="Speak a summary">Summary</button>
+        <button id="undoBtn" title="Remove the last set">Undo</button>
+        <button id="clearBtn" title="Clear today's log">Clear</button>
+      </div>
+    </div>
+
+    <div class="groups" id="groups"></div>
+
+    <p class="cheats">
+      Commands: <code>log 10 pushups</code> · <code>log 3 sets of 12 squats</code> ·
+      <code>start rest timer 90 seconds</code> · <code>show summary</code> ·
+      <code>clean today</code> · <code>undo</code> · <code>stop</code>
+    </p>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ------------------------------------------------------------------ *
+   * Storage
+   * ------------------------------------------------------------------ */
+  var STORE_KEY = "repcoach.v1";
+  var PREF_KEY = "repcoach.prefs.v1";
+  var NOTES_KEY = "repcoach.notes.v1";
+
+  function todayKey() {
+    var d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+
+  function loadStore() {
+    try {
+      return JSON.parse(localStorage.getItem(STORE_KEY) || "{}") || {};
+    } catch (e) {
+      return {};
+    }
+  }
+  function saveStore() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(store)); } catch (e) { /* storage unavailable */ }
+  }
+
+  function loadPrefs() {
+    try { return JSON.parse(localStorage.getItem(PREF_KEY) || "{}") || {}; } catch (e) { return {}; }
+  }
+  function savePrefs() {
+    try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch (e) { /* ignore */ }
+  }
+
+  var store = loadStore();
+  var prefs = loadPrefs();
+  if (typeof prefs.voiceOn !== "boolean") prefs.voiceOn = true;
+
+  // Per-day plain-text notes ({ "YYYY-MM-DD": "..." })
+  function loadNotes() {
+    try { return JSON.parse(localStorage.getItem(NOTES_KEY) || "{}") || {}; } catch (e) { return {}; }
+  }
+  function saveNotes() {
+    try { localStorage.setItem(NOTES_KEY, JSON.stringify(notesStore)); } catch (e) { /* ignore */ }
+  }
+  var notesStore = loadNotes();
+
+  // Suggested starter plan per weekday — plain text, no emoji. Shown day 1 until edited.
+  var DAY_PLANS = {
+    0: "Rest day\n- Light walk or stretching 15 min\n- Foam rolling\n- Hydrate and recover",
+    1: "Push day\n- Bench press 3 x 10\n- Shoulder press 3 x 12\n- Push-ups 3 x 15\n- Tricep extensions 3 x 12",
+    2: "Pull day\n- Pull-ups 3 x 8\n- Rows 3 x 12\n- Lat pulldown 3 x 12\n- Curls 3 x 12",
+    3: "Leg day\n- Squats 4 x 10\n- Lunges 3 x 12\n- Leg press 3 x 12\n- Calf raises 3 x 15",
+    4: "Upper body\n- Bench press 3 x 10\n- Rows 3 x 12\n- Shoulder press 3 x 12\n- Dips 3 x 10",
+    5: "Lower body & core\n- Deadlifts 3 x 8\n- Squats 3 x 10\n- Plank 3 x 45 sec\n- Sit-ups 3 x 20",
+    6: "Full body / cardio\n- Burpees 3 x 12\n- Kettlebell swings 3 x 15\n- Jumping jacks 3 x 30\n- Mountain climbers 3 x 20"
+  };
+
+  function suggestedPlan() {
+    return DAY_PLANS[new Date().getDay()] || "Today's plan\n- ";
+  }
+
+  function today() {
+    var k = todayKey();
+    if (!store[k]) store[k] = [];
+    return store[k];
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Exercises — canonical name + emoji
+   * ------------------------------------------------------------------ */
+  var EXERCISES = [
+    { re: /push[\s-]?ups?|press[\s-]?ups?/, name: "Push-ups", emoji: "🙌" },
+    { re: /pull[\s-]?ups?|chin[\s-]?ups?/, name: "Pull-ups", emoji: "🧗" },
+    { re: /lat[\s-]?pull[\s-]?downs?|pulldowns?/, name: "Lat Pulldown", emoji: "🧗" },
+    { re: /air[\s-]?squ?ats?|squ?ats?/, name: "Squats", emoji: "🦵" },
+    { re: /dead[\s-]?lifts?/, name: "Deadlifts", emoji: "🏋️" },
+    { re: /bench(?:[\s-]?press)?/, name: "Bench Press", emoji: "🛏️" },
+    { re: /shoulder[\s-]?press|overhead[\s-]?press|military[\s-]?press/, name: "Shoulder Press", emoji: "🏋️" },
+    { re: /(?:bicep[\s-]?)?curls?/, name: "Curls", emoji: "💪" },
+    { re: /tricep[\s-]?(?:extensions?|pushdowns?)/, name: "Tricep Extensions", emoji: "💪" },
+    { re: /lunges?/, name: "Lunges", emoji: "🦿" },
+    { re: /leg[\s-]?press/, name: "Leg Press", emoji: "🦵" },
+    { re: /calf[\s-]?raises?/, name: "Calf Raises", emoji: "🦵" },
+    { re: /sit[\s-]?ups?/, name: "Sit-ups", emoji: "🧎" },
+    { re: /crunch(?:es)?/, name: "Crunches", emoji: "🥨" },
+    { re: /planks?/, name: "Plank", emoji: "🧘" },
+    { re: /burpees?/, name: "Burpees", emoji: "🤸" },
+    { re: /jumping[\s-]?jacks?/, name: "Jumping Jacks", emoji: "🤾" },
+    { re: /mountain[\s-]?climbers?/, name: "Mountain Climbers", emoji: "⛰️" },
+    { re: /(?:barbell[\s-]?|dumbbell[\s-]?)?rows?/, name: "Rows", emoji: "🚣" },
+    { re: /dips?/, name: "Dips", emoji: "💪" },
+    { re: /kettlebell[\s-]?swings?|swings?/, name: "Kettlebell Swings", emoji: "🔔" },
+    { re: /box[\s-]?jumps?/, name: "Box Jumps", emoji: "📦" },
+    { re: /running|run|jog(?:ging)?/, name: "Running", emoji: "🏃" },
+  ];
+
+  function titleCase(s) {
+    return s.replace(/\w[^\s-]*/g, function (w) { return w.charAt(0).toUpperCase() + w.slice(1); });
+  }
+
+  function canonExercise(raw) {
+    var r = raw.toLowerCase().trim();
+    for (var i = 0; i < EXERCISES.length; i++) {
+      if (EXERCISES[i].re.test(r)) {
+        return { key: EXERCISES[i].name.toLowerCase(), name: EXERCISES[i].name, emoji: EXERCISES[i].emoji };
+      }
+    }
+    var name = titleCase(r);
+    return { key: r, name: name, emoji: "🏋️" };
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Number-word normalization  ("twenty five" -> "25")
+   * ------------------------------------------------------------------ */
+  var NUM_WORDS = {
+    zero: 0, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9,
+    ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16,
+    seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50,
+    sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, thousand: 1000, a: 1, an: 1
+  };
+
+  function normalizeNumbers(text) {
+    var tokens = text.split(/\s+/);
+    var out = [];
+    var cur = 0, has = false;
+    function flush() { if (has) out.push(String(cur)); cur = 0; has = false; }
+    for (var i = 0; i < tokens.length; i++) {
+      var t = tokens[i];
+      var w = t.replace(/[^a-z0-9]/gi, "").toLowerCase();
+      if (/^\d+$/.test(w)) { flush(); out.push(w); continue; }
+      if (Object.prototype.hasOwnProperty.call(NUM_WORDS, w)) {
+        var v = NUM_WORDS[w];
+        if (!has) { cur = v; has = true; }
+        else if (v === 100 || v === 1000) { cur = (cur === 0 ? 1 : cur) * v; }
+        else if (cur % 100 === 0 && v < 100) { cur += v; }
+        else { cur += v; }
+      } else {
+        flush(); out.push(t);
+      }
+    }
+    flush();
+    return out.join(" ");
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Command parsing
+   * ------------------------------------------------------------------ */
+  var FILLER_TRAIL = /\b(please|now|today|ok|okay|thanks|thank you|done|yeah)\b[\s.!,]*$/i;
+
+  function cleanExercise(s) {
+    s = s.replace(/^of\s+/, "").replace(/[.,!?]+$/, "").trim();
+    var prev;
+    do { prev = s; s = s.replace(FILLER_TRAIL, "").trim(); } while (s !== prev);
+    return s;
+  }
+
+  function parseLog(text) {
+    // text is already number-normalized & lowercased, command verb stripped
+    var m;
+
+    // "<sets> set(s) [of] <reps> [reps] [of] <exercise>"
+    m = text.match(/(\d+)\s*sets?\s*(?:of\s*)?(\d+)\s*(?:reps?\s*)?(?:of\s+)?([a-z].*)$/);
+    if (m) return { sets: +m[1], reps: +m[2], ex: cleanExercise(m[3]) };
+
+    // "<reps> rep(s) [of] <exercise>"
+    m = text.match(/(\d+)\s*reps?\s*(?:of\s+)?([a-z].*)$/);
+    if (m) return { sets: 1, reps: +m[1], ex: cleanExercise(m[2]) };
+
+    // "<n> <exercise>"  ->  one set of n reps
+    m = text.match(/(\d+)\s+([a-z].*)$/);
+    if (m) return { sets: 1, reps: +m[1], ex: cleanExercise(m[2]) };
+
+    return null;
+  }
+
+  function parseDuration(text) {
+    // returns seconds or null
+    var m = text.match(/(\d+)\s*(hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)?\b/);
+    if (!m) return null;
+    var n = +m[1];
+    var unit = (m[2] || "").toLowerCase();
+    if (/^h/.test(unit)) return n * 3600;
+    if (/^m/.test(unit)) return n * 60;
+    return n; // default seconds
+  }
+
+  function handleCommand(rawInput) {
+    var raw = (rawInput || "").trim();
+    if (!raw) return;
+    var text = normalizeNumbers(raw.toLowerCase()).trim();
+
+    // stop / cancel
+    if (/\b(stop|cancel|abort)\b/.test(text)) {
+      if (timer.active) { cancelTimer(true); return; }
+      say("Nothing to stop."); toast("Nothing to stop.", "err"); return;
+    }
+
+    // clear today
+    if (/\b(clean|clear|reset|wipe|empty)\b/.test(text) && /\b(today|all|log|everything|session)\b|^(clean|clear|reset|wipe|empty)\b/.test(text)) {
+      clearToday();
+      return;
+    }
+
+    // undo
+    if (/\bundo\b/.test(text)) { undoLast(); return; }
+
+    // summary
+    if (/\b(summary|summarise|summarize|recap|total|totals|progress)\b/.test(text)) {
+      speakSummary();
+      return;
+    }
+
+    // rest timer
+    if (/\b(rest|timer|countdown|break)\b/.test(text)) {
+      var secs = parseDuration(text);
+      if (!secs) { say("How long should the rest be?"); toast("Say a duration, e.g. “rest timer 90 seconds”.", "err"); return; }
+      startTimer(secs);
+      return;
+    }
+
+    // log — strip leading command verb
+    var body = text.replace(/^(log|add|record|track|enter|do|did|got|put down)\s+/, "");
+    var parsed = parseLog(body);
+    if (parsed && parsed.ex) {
+      if (parsed.reps < 1 || parsed.reps > 10000 || parsed.sets < 1 || parsed.sets > 100) {
+        say("That doesn't look right."); toast("Numbers out of range.", "err"); return;
+      }
+      logSet(parsed.sets, parsed.reps, parsed.ex);
+      return;
+    }
+
+    say("Sorry, I didn't catch that.");
+    toast("Didn't understand: “" + raw + "”", "err");
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Actions
+   * ------------------------------------------------------------------ */
+  var lastNewId = null;
+
+  function logSet(sets, reps, exRaw) {
+    var ex = canonExercise(exRaw);
+    var entry = {
+      id: Date.now() + "-" + Math.random().toString(36).slice(2, 7),
+      key: ex.key, name: ex.name, emoji: ex.emoji,
+      sets: sets, reps: reps, t: Date.now()
+    };
+    today().push(entry);
+    saveStore();
+    lastNewId = entry.id;
+    render();
+
+    var setsWord = sets === 1 ? "set" : "sets";
+    var repsWord = reps === 1 ? "rep" : "reps";
+    var phrase = sets === 1
+      ? "Logged " + reps + " " + repsWord + " of " + ex.name + "."
+      : "Logged " + sets + " " + setsWord + " of " + reps + " " + ex.name + ".";
+    say(phrase);
+    toast(ex.emoji + "  " + phrase, "ok");
+  }
+
+  function undoLast() {
+    var day = today();
+    if (!day.length) { say("Nothing to undo."); toast("Nothing to undo.", "err"); return; }
+    var removed = day.pop();
+    saveStore();
+    render();
+    say("Removed " + removed.name + ".");
+    toast("Removed last set of " + removed.name + ".", "ok");
+  }
+
+  function deleteEntry(id) {
+    var day = today();
+    var idx = day.findIndex(function (e) { return e.id === id; });
+    if (idx === -1) return;
+    var removed = day.splice(idx, 1)[0];
+    saveStore();
+    render();
+    toast("Removed a set of " + removed.name + ".", "ok");
+  }
+
+  var clearedBackup = null;
+  function clearToday() {
+    var day = today();
+    if (!day.length) { say("Today's log is already empty."); toast("Already empty.", "err"); return; }
+    clearedBackup = { key: todayKey(), items: day.slice() };
+    store[todayKey()] = [];
+    saveStore();
+    render();
+    say("Cleared today's log.");
+    toastUndoable("Cleared today's log.");
+  }
+
+  function restoreCleared() {
+    if (!clearedBackup) return;
+    store[clearedBackup.key] = clearedBackup.items;
+    clearedBackup = null;
+    saveStore();
+    render();
+    toast("Restored.", "ok");
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Summary
+   * ------------------------------------------------------------------ */
+  function computeTotals() {
+    var day = today();
+    var totalSets = 0, totalReps = 0;
+    var groups = {}, order = [];
+    for (var i = 0; i < day.length; i++) {
+      var e = day[i];
+      totalSets += e.sets;
+      totalReps += e.sets * e.reps;
+      if (!groups[e.key]) {
+        groups[e.key] = { name: e.name, emoji: e.emoji, items: [], sets: 0, reps: 0 };
+        order.push(e.key);
+      }
+      groups[e.key].items.push(e);
+      groups[e.key].sets += e.sets;
+      groups[e.key].reps += e.sets * e.reps;
+    }
+    return { totalSets: totalSets, totalReps: totalReps, groups: groups, order: order };
+  }
+
+  function speakSummary() {
+    var t = computeTotals();
+    tileSets.classList.remove("flash"); tileReps.classList.remove("flash");
+    void tileSets.offsetWidth;
+    tileSets.classList.add("flash"); tileReps.classList.add("flash");
+
+    if (!t.order.length) { say("No sets logged yet today. Let's get started."); toast("Nothing logged yet today.", ""); return; }
+    var parts = t.order.map(function (k) {
+      var g = t.groups[k];
+      return g.reps + " " + g.name;
+    });
+    var list = parts.length === 1 ? parts[0]
+      : parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1];
+    var exWord = t.order.length === 1 ? "exercise" : "exercises";
+    var msg = "Today: " + t.totalReps + " reps across " + t.totalSets + " sets and " + t.order.length + " " + exWord + ". " + list + ".";
+    say(msg);
+    toast(msg, "");
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Rest timer
+   * ------------------------------------------------------------------ */
+  var TIMER_CIRC = 2 * Math.PI * 48; // r = 48
+  var timer = { active: false, total: 0, left: 0, handle: null };
+
+  function fmtTime(s) {
+    var m = Math.floor(s / 60), sec = s % 60;
+    return m + ":" + String(sec).padStart(2, "0");
+  }
+
+  function startTimer(seconds) {
+    cancelTimer(false);
+    timer.active = true;
+    timer.total = seconds;
+    timer.left = seconds;
+    timerCard.hidden = false;
+    timerTitle.textContent = "Resting…";
+    updateTimerUI();
+
+    timer.handle = setInterval(function () {
+      timer.left -= 1;
+      if (timer.left <= 0) {
+        timer.left = 0;
+        updateTimerUI();
+        finishTimer();
+      } else {
+        updateTimerUI();
+      }
+    }, 1000);
+
+    var label = seconds % 60 === 0 && seconds >= 60
+      ? (seconds / 60) + (seconds === 60 ? " minute" : " minutes")
+      : seconds + " seconds";
+    say("Rest timer started for " + label + ".");
+    toast("⏱️  Resting for " + fmtTime(seconds) + ".", "ok");
+  }
+
+  function updateTimerUI() {
+    timerCount.textContent = fmtTime(timer.left);
+    var frac = timer.total ? timer.left / timer.total : 0;
+    timerBar.style.strokeDashoffset = String(TIMER_CIRC * (1 - frac));
+  }
+
+  function finishTimer() {
+    clearInterval(timer.handle);
+    timer.handle = null;
+    timer.active = false;
+    timerTitle.textContent = "Rest over — go!";
+    beep();
+    say("Rest over. Let's go.");
+    toast("✅ Rest over — back to it!", "ok");
+    setTimeout(function () { if (!timer.active) timerCard.hidden = true; }, 4000);
+  }
+
+  function cancelTimer(announce) {
+    if (timer.handle) { clearInterval(timer.handle); timer.handle = null; }
+    var wasActive = timer.active;
+    timer.active = false;
+    timerCard.hidden = true;
+    if (announce && wasActive) { say("Rest timer cancelled."); toast("Timer cancelled.", ""); }
+  }
+
+  // Short WebAudio beep (no asset files needed)
+  var audioCtx = null;
+  function beep() {
+    try {
+      audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === "suspended") audioCtx.resume();
+      var pattern = [0, 0.18, 0.36];
+      pattern.forEach(function (start) {
+        var o = audioCtx.createOscillator();
+        var g = audioCtx.createGain();
+        o.type = "sine";
+        o.frequency.value = 880;
+        var t0 = audioCtx.currentTime + start;
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(0.25, t0 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.15);
+        o.connect(g); g.connect(audioCtx.destination);
+        o.start(t0); o.stop(t0 + 0.16);
+      });
+    } catch (e) { /* audio unavailable */ }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Speech synthesis
+   * ------------------------------------------------------------------ */
+  var synth = window.speechSynthesis || null;
+  var chosenVoice = null;
+
+  function pickVoice() {
+    if (!synth) return;
+    var voices = synth.getVoices();
+    if (!voices.length) return;
+    chosenVoice =
+      voices.find(function (v) { return /en[-_]US/i.test(v.lang) && /female|samantha|google us/i.test(v.name); }) ||
+      voices.find(function (v) { return /en[-_]US/i.test(v.lang); }) ||
+      voices.find(function (v) { return /^en/i.test(v.lang); }) ||
+      voices[0];
+  }
+  if (synth) {
+    pickVoice();
+    synth.onvoiceschanged = pickVoice;
+  }
+
+  function say(text) {
+    if (!prefs.voiceOn || !synth) return;
+    try {
+      synth.cancel();
+      var u = new SpeechSynthesisUtterance(text);
+      if (chosenVoice) u.voice = chosenVoice;
+      u.rate = 1.03;
+      u.pitch = 1.0;
+      synth.speak(u);
+    } catch (e) { /* ignore */ }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Speech recognition
+   * ------------------------------------------------------------------ */
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  var recognition = null;
+  var listening = false;
+
+  function setupRecognition() {
+    if (!SR) {
+      micBtn.disabled = true;
+      micStatus.textContent = "Voice input not supported here";
+      micBtn.setAttribute("aria-label", "Voice input not supported");
+      return;
+    }
+    recognition = new SR();
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = function () {
+      listening = true;
+      micBtn.classList.add("listening");
+      micBtn.setAttribute("aria-label", "Stop listening");
+      micStatus.textContent = "Listening…";
+      transcriptEl.textContent = "";
+    };
+
+    recognition.onresult = function (ev) {
+      var interim = "", final = "";
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        var r = ev.results[i];
+        if (r.isFinal) final += r[0].transcript;
+        else interim += r[0].transcript;
+      }
+      transcriptEl.textContent = (final || interim).trim();
+      if (final) {
+        var cmd = final.trim();
+        stopListening();
+        handleCommand(cmd);
+      }
+    };
+
+    recognition.onerror = function (ev) {
+      listening = false;
+      micBtn.classList.remove("listening");
+      if (ev.error === "not-allowed" || ev.error === "service-not-allowed") {
+        micStatus.textContent = "Microphone blocked";
+        toast("Microphone permission denied. Allow it, or type a command below.", "err");
+      } else if (ev.error === "no-speech") {
+        micStatus.textContent = "Didn't hear anything";
+      } else if (ev.error === "audio-capture") {
+        micStatus.textContent = "No microphone found";
+        toast("No microphone available. Type a command instead.", "err");
+      } else {
+        micStatus.textContent = "Tap to speak";
+      }
+    };
+
+    recognition.onend = function () {
+      listening = false;
+      micBtn.classList.remove("listening");
+      micBtn.setAttribute("aria-label", "Start listening");
+      if (micStatus.textContent === "Listening…") micStatus.textContent = "Tap to speak";
+    };
+  }
+
+  function startListening() {
+    if (!recognition) return;
+    // Resume audio context on the user gesture so the timer beep works later.
+    try { if (audioCtx && audioCtx.state === "suspended") audioCtx.resume(); } catch (e) {}
+    try {
+      recognition.start();
+    } catch (e) {
+      // start() throws if already running; reset.
+      try { recognition.stop(); } catch (e2) {}
+    }
+  }
+
+  function stopListening() {
+    if (!recognition) return;
+    try { recognition.stop(); } catch (e) {}
+    listening = false;
+    micBtn.classList.remove("listening");
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Rendering
+   * ------------------------------------------------------------------ */
+  var groupsEl, statSetsEl, statRepsEl, tileSets, tileReps;
+  var micBtn, micStatus, transcriptEl, timerCard, timerCount, timerBar, timerTitle;
+
+  function fmtClock(ts) {
+    var d = new Date(ts);
+    var h = d.getHours(), m = d.getMinutes();
+    var ap = h >= 12 ? "pm" : "am";
+    h = h % 12; if (h === 0) h = 12;
+    return h + ":" + String(m).padStart(2, "0") + ap;
+  }
+
+  function render() {
+    var t = computeTotals();
+    statSetsEl.textContent = t.totalSets;
+    statRepsEl.textContent = t.totalReps;
+
+    groupsEl.innerHTML = "";
+    if (!t.order.length) {
+      var empty = document.createElement("div");
+      empty.className = "empty";
+      empty.innerHTML = '<span class="big">🎙️</span>No sets logged yet today.<br>Tap the mic and say “log 10 pushups”.';
+      groupsEl.appendChild(empty);
+      return;
+    }
+
+    t.order.forEach(function (key) {
+      var g = t.groups[key];
+      var card = document.createElement("div");
+      card.className = "group";
+
+      var head = document.createElement("div");
+      head.className = "g-head";
+      var repsWord = g.reps === 1 ? "rep" : "reps";
+      head.innerHTML =
+        '<span class="emoji" aria-hidden="true">' + g.emoji + '</span>' +
+        '<span class="g-name"></span>' +
+        '<span class="g-sub">' + g.sets + (g.sets === 1 ? " set" : " sets") + ' · ' + g.reps + ' ' + repsWord + '</span>';
+      head.querySelector(".g-name").textContent = g.name;
+      card.appendChild(head);
+
+      g.items.forEach(function (e) {
+        var row = document.createElement("div");
+        row.className = "set-row" + (e.id === lastNewId ? " new" : "");
+        var reps = document.createElement("span");
+        reps.className = "reps";
+        reps.innerHTML = e.sets === 1
+          ? '<b>' + e.reps + '</b> reps'
+          : '<b>' + e.sets + ' × ' + e.reps + '</b> reps';
+        var time = document.createElement("span");
+        time.className = "time";
+        time.textContent = fmtClock(e.t);
+        var del = document.createElement("button");
+        del.className = "del";
+        del.setAttribute("aria-label", "Delete this set of " + e.name);
+        del.textContent = "✕";
+        del.addEventListener("click", function () { deleteEntry(e.id); });
+
+        row.appendChild(reps);
+        row.appendChild(time);
+        row.appendChild(del);
+        card.appendChild(row);
+      });
+
+      groupsEl.appendChild(card);
+    });
+
+    lastNewId = null; // only highlight once
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Daily plan / notes
+   * ------------------------------------------------------------------ */
+  var notesArea, notesSaved, notesReset, notesSaveTimer, notesSavedTimer;
+
+  function currentNotes() {
+    var k = todayKey();
+    return Object.prototype.hasOwnProperty.call(notesStore, k) ? notesStore[k] : suggestedPlan();
+  }
+
+  function flashSaved() {
+    notesSaved.classList.add("show");
+    clearTimeout(notesSavedTimer);
+    notesSavedTimer = setTimeout(function () { notesSaved.classList.remove("show"); }, 1400);
+  }
+
+  function initNotes() {
+    notesArea.value = currentNotes();
+    // Persist (debounced) on every edit. An empty box is still stored, so it
+    // won't snap back to the suggestion.
+    notesArea.addEventListener("input", function () {
+      clearTimeout(notesSaveTimer);
+      notesSaveTimer = setTimeout(function () {
+        notesStore[todayKey()] = notesArea.value;
+        saveNotes();
+        flashSaved();
+      }, 500);
+    });
+    notesReset.addEventListener("click", function () {
+      notesArea.value = suggestedPlan();
+      notesStore[todayKey()] = notesArea.value;
+      saveNotes();
+      flashSaved();
+      notesArea.focus();
+    });
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Toast
+   * ------------------------------------------------------------------ */
+  var toastEl, toastTimer;
+  function toast(msg, kind) {
+    toastEl.textContent = msg;
+    toastEl.className = "toast show" + (kind ? " " + kind : "");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.className = "toast"; }, 3200);
+  }
+  function toastUndoable(msg) {
+    toastEl.innerHTML = "";
+    var span = document.createElement("span");
+    span.textContent = msg + "  ";
+    var btn = document.createElement("button");
+    btn.textContent = "Undo";
+    btn.style.cssText = "background:transparent;border:none;color:var(--good);font:inherit;cursor:pointer;text-decoration:underline;padding:0;";
+    btn.addEventListener("click", function () { restoreCleared(); });
+    toastEl.appendChild(span);
+    toastEl.appendChild(btn);
+    toastEl.className = "toast show";
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.className = "toast"; }, 6000);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Boot
+   * ------------------------------------------------------------------ */
+  function updateSoundUI() {
+    var tgl = document.getElementById("soundToggle");
+    tgl.setAttribute("aria-pressed", prefs.voiceOn ? "true" : "false");
+    document.getElementById("soundIcon").textContent = prefs.voiceOn ? "🔊" : "🔇";
+  }
+
+  document.addEventListener("DOMContentLoaded", function () {
+    groupsEl = document.getElementById("groups");
+    statSetsEl = document.getElementById("statSets");
+    statRepsEl = document.getElementById("statReps");
+    tileSets = document.getElementById("tileSets");
+    tileReps = document.getElementById("tileReps");
+    micBtn = document.getElementById("micBtn");
+    micStatus = document.getElementById("micStatus");
+    transcriptEl = document.getElementById("transcript");
+    timerCard = document.getElementById("timerCard");
+    timerCount = document.getElementById("timerCount");
+    timerBar = document.getElementById("timerBar");
+    timerTitle = document.getElementById("timerTitle");
+    toastEl = document.getElementById("toast");
+    notesArea = document.getElementById("notesArea");
+    notesSaved = document.getElementById("notesSaved");
+    notesReset = document.getElementById("notesReset");
+
+    timerBar.setAttribute("stroke-dasharray", String(TIMER_CIRC));
+    timerBar.style.strokeDashoffset = "0";
+
+    // Date label
+    var d = new Date();
+    document.getElementById("dateLabel").textContent =
+      d.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" });
+
+    updateSoundUI();
+    setupRecognition();
+    initNotes();
+    render();
+
+    // Mic toggle
+    micBtn.addEventListener("click", function () {
+      if (micBtn.disabled) return;
+      if (listening) stopListening();
+      else startListening();
+    });
+
+    // Sound toggle
+    document.getElementById("soundToggle").addEventListener("click", function () {
+      prefs.voiceOn = !prefs.voiceOn;
+      savePrefs();
+      updateSoundUI();
+      if (prefs.voiceOn) say("Voice confirmations on.");
+      toast(prefs.voiceOn ? "Voice confirmations on." : "Voice confirmations muted.", "");
+    });
+
+    // Text command fallback
+    document.getElementById("cmdForm").addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var input = document.getElementById("cmdInput");
+      var val = input.value.trim();
+      if (!val) return;
+      try { if (audioCtx && audioCtx.state === "suspended") audioCtx.resume(); } catch (e) {}
+      handleCommand(val);
+      input.value = "";
+    });
+
+    // Log actions
+    document.getElementById("summaryBtn").addEventListener("click", speakSummary);
+    document.getElementById("undoBtn").addEventListener("click", undoLast);
+    document.getElementById("clearBtn").addEventListener("click", clearToday);
+    document.getElementById("timerCancel").addEventListener("click", function () { cancelTimer(true); });
+  });
+})();
+</script>
+</body>
+</html>
